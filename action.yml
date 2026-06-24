@@ -1,0 +1,58 @@
+name: 'Node.js CI/CD Wrapper'
+description: 'Automated Node.js setup, build, and test pipeline for GitHub Actions'
+author: 'Your Name'
+
+branding:
+  icon: 'package'
+  color: 'green'
+
+inputs:
+  node-version:
+    description: 'Node.js version to install (e.g. 20, 22.x)'
+    required: false
+    default: '20'
+  package-manager:
+    description: 'Package manager to use (npm, yarn, or pnpm)'
+    required: false
+    default: 'npm'
+  install-command:
+    description: 'Override the install command'
+    required: false
+    default: ''
+  build-command:
+    description: 'Override the build command'
+    required: false
+    default: ''
+  test-command:
+    description: 'Override the test command'
+    required: false
+    default: ''
+  working-directory:
+    description: 'Directory where the Node.js project lives'
+    required: false
+    default: '.'
+  skip-build:
+    description: 'Skip the build step'
+    required: false
+    default: 'false'
+  skip-test:
+    description: 'Skip the test step'
+    required: false
+    default: 'false'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Run setup and build
+      shell: bash
+      env:
+        INPUT_NODE_VERSION: ${{ inputs.node-version }}
+        INPUT_PACKAGE_MANAGER: ${{ inputs.package-manager }}
+        INPUT_INSTALL_COMMAND: ${{ inputs.install-command }}
+        INPUT_BUILD_COMMAND: ${{ inputs.build-command }}
+        INPUT_TEST_COMMAND: ${{ inputs.test-command }}
+        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
+        INPUT_SKIP_BUILD: ${{ inputs.skip-build }}
+        INPUT_SKIP_TEST: ${{ inputs.skip-test }}
+      run: |
+        bash "${{ github.action_path }}/setup-build.sh"

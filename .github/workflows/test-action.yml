@@ -1,0 +1,42 @@
+name: 'Node.js Enterprise CI/CD Wrapper'
+description: 'A highly reusable Node.js CI/CD pipeline with auto-retry, security audits, and validation.'
+author: 'Your Name'
+
+# User-configurable inputs
+inputs:
+  node-version:
+    description: 'Node.js version to use'
+    required: false
+    default: '20'
+  skip-tests:
+    description: 'Set to true to skip unit tests'
+    required: false
+    default: 'false'
+  skip-lint:
+    description: 'Set to true to skip code linting'
+    required: false
+    default: 'false'
+
+# How this action runs (Composite Action)
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Make Script Executable
+      # github.action_path resolves the directory where this action is installed
+      run: chmod +x ${{ github.action_path }}/setup-build.sh
+      shell: bash
+
+    - name: Run CI/CD Wrapper Script
+      # Build flags from user inputs and pass them to the script
+      run: |
+        FLAGS=""
+        if [ "${{ inputs.skip-tests }}" == "true" ]; then FLAGS="$FLAGS --skip-tests"; fi
+        if [ "${{ inputs.skip-lint }}" == "true" ]; then FLAGS="$FLAGS --skip-lint"; fi
+        
+        ${{ github.action_path }}/setup-build.sh $FLAGS
+      shell: bash
