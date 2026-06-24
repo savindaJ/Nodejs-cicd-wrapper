@@ -98,7 +98,7 @@ npm -v || log_error "NPM is not installed!"
 # Step 1: Clean Install (with retry logic)
 # ==========================================
 log_info "Running 'npm ci' to install clean dependencies..."
-with_retry 3 10 npm ci
+with_retry 3 10 npm ci --include=dev
 log_success "Dependencies installed successfully."
 
 # ==========================================
