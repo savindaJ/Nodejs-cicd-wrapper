@@ -164,6 +164,22 @@ Reports are published in:
 
 Or leave `dast-target` empty.
 
+**Server vs frontend DAST — both are supported.** OWASP ZAP scans any running HTTP URL. Point `dast-target` at what you want tested:
+
+| App type | Example `dast-target` | Example `dast-start-command` |
+| --- | --- | --- |
+| **Backend / API** (Express, NestJS) | `http://localhost:3000` | `npm run start` |
+| **Frontend** (React, Next.js, Vite) | `http://localhost:3000` | `npm run start` or `npm run preview` |
+| **Deployed staging** | `https://staging.example.com` | _(leave empty — app already running)_ |
+
+ZAP spiders the target URL and checks responses for XSS, missing security headers, misconfigurations, and other runtime issues. It works the same for server-rendered APIs and frontend apps — the difference is only which URL you start and scan.
+
+To scan **both** API and frontend, run the action twice with different `dast-target` values, or scan a deployed environment where both are served under one domain.
+
+**Alert levels and CI failure:**
+
+By default, ZAP fails on any alert including warnings. When `dast-fail-on-findings` is `false`, the wrapper passes `-I` to ZAP so **warnings do not fail the job** — only FAIL-level alerts will fail. Set `dast-fail-on-findings: 'true'` to fail on any alert.
+
 ### Examples
 
 **Skip tests on draft pull requests:**

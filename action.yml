@@ -125,6 +125,7 @@ runs:
       with:
         target: ${{ env.DAST_TARGET }}
         fail_action: ${{ inputs.dast-fail-on-findings }}
+        cmd_options: ${{ inputs.dast-fail-on-findings == 'true' && '' || '-I' }}
         allow_issue_writing: false
         artifact_name: dast-zap-report
 
