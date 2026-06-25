@@ -30,6 +30,7 @@ coverage/
 .nyc_output/
 sast-reports/
 dast-reports/
+secrets-reports/
 
 # Temporary files
 tmp/

@@ -1,8 +1,16 @@
 # Node.js CI/CD Wrapper
 
-A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipeline — clean install, security audit, **SAST static analysis**, lint, test, build, and optional **DAST dynamic scanning** — with retry logic, colored logging, and optional skip flags.
+A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipeline — **Gitleaks secret scanning**, clean install, security audit, **SAST static analysis**, lint, test, build, and optional **DAST dynamic scanning** — with retry logic, colored logging, and optional skip flags.
 
 ## Pipeline
+
+The composite action runs these stages in order:
+
+| Stage | Tool | Notes |
+| --- | --- | --- |
+| 1. Secret scan | **Gitleaks** | Scans source code and Git history for API keys, tokens, passwords |
+| 2. Build pipeline | `setup-build.sh` | Install, audit, SAST, lint, test, build (see below) |
+| 3. DAST scan | OWASP ZAP | Post-deploy only — when `dast-target` is set |
 
 `setup-build.sh` runs these steps in order:
 
@@ -11,12 +19,11 @@ A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipelin
 | 1. Environment check | `node -v`, `npm -v` | Fails if Node.js or npm is missing |
 | 2. Clean install | `npm ci --include=dev` | Retries up to 3 times with a 10s delay |
 | 3. Security audit | `npm audit --audit-level=high` | Fails on high or critical dependency vulnerabilities |
-| 4. SAST scan | `semgrep scan` (default, JS/TS/Node/security rules) | Static analysis for security bugs, errors, and coding issues; SARIF + summary report |
-| 5. Lint | `npm run lint` | Skipped if no `lint` script exists, or when `--skip-lint` is passed |
-| 6. Test | `npm run test` | Skipped if no `test` script exists, or when `--skip-tests` is passed |
+| 4. SAST scan | `semgrep scan` | Static analysis for security bugs, errors, and coding issues |
+| 5. Lint | `npm run lint` | Skipped if no `lint` script exists |
+| 6. Test | `npm run test` | Skipped if no `test` script exists |
 | 7. Build | `npm run build` | Always runs |
 | 8. Build verification | — | Confirms `build/`, `dist/`, or `.next/` was created |
-| 9. DAST scan | OWASP ZAP baseline scan | Runs after build when `dast-target` is set; scans a running application URL |
 
 Required `package.json` scripts:
 
@@ -111,6 +118,10 @@ jobs:
 | --- | --- | --- | --- |
 | `node-version` | Node.js version to install via `actions/setup-node` | No | `20` |
 | `pipeline-mode` | `full` (build + DAST), `build` (build only), or `dast-only` (post-deploy DAST) | No | `full` |
+| `skip-secrets` | Set to `true` to skip Gitleaks secret scanning | No | `false` |
+| `secrets-fail-on-findings` | Set to `true` to fail the job when secrets are found | No | `true` |
+| `secrets-report-dir` | Directory for Gitleaks report files | No | `secrets-reports` |
+| `secrets-scan-history` | Scan full Git history (use `checkout` with `fetch-depth: 0`) | No | `true` |
 | `skip-tests` | Set to `true` to skip unit tests | No | `false` |
 | `skip-lint` | Set to `true` to skip code linting | No | `false` |
 | `skip-sast` | Set to `true` to skip SAST static analysis | No | `false` |
@@ -122,6 +133,45 @@ jobs:
 | `dast-start-wait-seconds` | Seconds to wait for the app to become ready | No | `15` |
 | `dast-fail-on-findings` | Set to `true` to fail the job when ZAP finds alerts | No | `false` |
 | `dast-report-dir` | Directory for DAST report files | No | `dast-reports` |
+
+### Secret scanning (Gitleaks)
+
+The wrapper uses [Gitleaks](https://github.com/gitleaks/gitleaks) to detect hardcoded secrets in source code and Git history:
+
+- API keys and access tokens
+- Passwords and database credentials
+- Private keys and JWT secrets
+- Cloud provider credentials (AWS, GCP, Azure)
+
+Gitleaks runs **first** in the build pipeline — before install and build — so secrets fail fast.
+
+Reports are published in:
+
+1. **GitHub Actions job summary** — rule counts and detected secret locations (redacted)
+2. **Workflow artifacts** — `gitleaks.json` and `gitleaks.sarif`
+3. **GitHub Security tab** — SARIF upload
+
+**Required checkout for full Git history scan:**
+
+```yaml
+- uses: actions/checkout@v4
+  with:
+    fetch-depth: 0
+
+- uses: your-org/nodejs-cicd-wrapper@v1
+  with:
+    skip-secrets: 'false'
+    secrets-fail-on-findings: 'true'
+    secrets-scan-history: 'true'
+```
+
+**Scan working tree only (no Git history):**
+
+```yaml
+- uses: your-org/nodejs-cicd-wrapper@v1
+  with:
+    secrets-scan-history: 'false'
+```
 
 ### SAST static analysis
 
@@ -326,6 +376,8 @@ nodejs-cicd-wrapper/
 ├── setup-build.sh           # CI/CD pipeline script
 ├── scripts/
 │   ├── sast-summary.sh      # Writes SAST results to GitHub job summary
+│   ├── secrets-scan.sh      # Runs Gitleaks secret scanning
+│   ├── secrets-summary.sh   # Writes Gitleaks results to GitHub job summary
 │   ├── dast-prepare.sh      # Starts app and prepares DAST target URL
 │   ├── dast-collect.sh      # Collects OWASP ZAP report files
 │   └── dast-summary.sh      # Writes DAST results to GitHub job summary

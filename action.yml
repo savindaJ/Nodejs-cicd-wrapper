@@ -59,16 +59,26 @@ inputs:
     description: 'Directory where DAST reports are written'
     required: false
     default: 'dast-reports'
+  skip-secrets:
+    description: 'Set to true to skip Gitleaks secret scanning'
+    required: false
+    default: 'false'
+  secrets-fail-on-findings:
+    description: 'Fail the pipeline when Gitleaks finds exposed secrets'
+    required: false
+    default: 'true'
+  secrets-report-dir:
+    description: 'Directory where Gitleaks reports are written'
+    required: false
+    default: 'secrets-reports'
+  secrets-scan-history:
+    description: 'Scan full Git history (requires checkout fetch-depth: 0). Set false to scan working tree only'
+    required: false
+    default: 'true'
 
 runs:
   using: 'composite'
   steps:
-    - name: Setup Node.js
-      if: inputs.pipeline-mode != 'dast-only'
-      uses: actions/setup-node@v4
-      with:
-        node-version: ${{ inputs.node-version }}
-
     - name: Make scripts executable
       shell: bash
       run: |
@@ -77,6 +87,46 @@ runs:
         chmod +x "${{ github.action_path }}/scripts/dast-prepare.sh"
         chmod +x "${{ github.action_path }}/scripts/dast-summary.sh"
         chmod +x "${{ github.action_path }}/scripts/dast-collect.sh"
+        chmod +x "${{ github.action_path }}/scripts/secrets-scan.sh"
+        chmod +x "${{ github.action_path }}/scripts/secrets-summary.sh"
+
+    - name: Gitleaks secret scan
+      if: inputs.pipeline-mode != 'dast-only' && inputs.skip-secrets != 'true'
+      shell: bash
+      env:
+        SECRETS_FAIL_ON_FINDINGS: ${{ inputs.secrets-fail-on-findings }}
+        SECRETS_REPORT_DIR: ${{ inputs.secrets-report-dir }}
+        SECRETS_SCAN_HISTORY: ${{ inputs.secrets-scan-history }}
+      run: bash "${{ github.action_path }}/scripts/secrets-scan.sh"
+
+    - name: Publish secrets report to job summary
+      if: always() && inputs.pipeline-mode != 'dast-only' && inputs.skip-secrets != 'true'
+      shell: bash
+      env:
+        SECRETS_REPORT_DIR: ${{ inputs.secrets-report-dir }}
+      run: bash "${{ github.action_path }}/scripts/secrets-summary.sh"
+
+    - name: Upload secrets SARIF to GitHub Security
+      if: inputs.pipeline-mode != 'dast-only' && inputs.skip-secrets != 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.secrets-report-dir }}/gitleaks.sarif
+        category: gitleaks-secrets
+
+    - name: Upload secrets report artifact
+      if: inputs.pipeline-mode != 'dast-only' && inputs.skip-secrets != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: secrets-report
+        path: ${{ inputs.secrets-report-dir }}/
+        if-no-files-found: warn
+        retention-days: 30
+
+    - name: Setup Node.js
+      if: inputs.pipeline-mode != 'dast-only'
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
 
     - name: Run CI/CD pipeline
       if: inputs.pipeline-mode != 'dast-only'
