@@ -11,7 +11,7 @@ A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipelin
 | 1. Environment check | `node -v`, `npm -v` | Fails if Node.js or npm is missing |
 | 2. Clean install | `npm ci --include=dev` | Retries up to 3 times with a 10s delay |
 | 3. Security audit | `npm audit --audit-level=high` | Fails on high or critical dependency vulnerabilities |
-| 4. SAST scan | `semgrep scan --config=auto` | Static analysis for security bugs, errors, and coding issues; SARIF + summary report |
+| 4. SAST scan | `semgrep scan` (default, JS/TS/Node/security rules) | Static analysis for security bugs, errors, and coding issues; SARIF + summary report |
 | 5. Lint | `npm run lint` | Skipped if no `lint` script exists, or when `--skip-lint` is passed |
 | 6. Test | `npm run test` | Skipped if no `test` script exists, or when `--skip-tests` is passed |
 | 7. Build | `npm run build` | Always runs |

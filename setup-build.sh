@@ -129,9 +129,14 @@ else
         python3 -m pip install --quiet semgrep
     fi
 
+    # Explicit rule packs work with --metrics=off (--config=auto requires metrics enabled).
     SEMGREP_COMMON=(
         scan
-        --config=auto
+        --config=p/default
+        --config=p/javascript
+        --config=p/typescript
+        --config=p/nodejs
+        --config=p/security-audit
         --metrics=off
         --exclude=node_modules
         --exclude=dist
