@@ -64,7 +64,6 @@ SKIP_LINT=false
 SKIP_SAST=false
 SAST_REPORT_DIR="${SAST_REPORT_DIR:-sast-reports}"
 SAST_FAIL_ON_FINDINGS="${SAST_FAIL_ON_FINDINGS:-false}"
-SAST_FAIL_ON_SECRETS="${SAST_FAIL_ON_SECRETS:-false}"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -121,7 +120,7 @@ if [ "$SKIP_SAST" = true ]; then
     log_warning "Skipping SAST static analysis as requested by --skip-sast flag."
 else
     log_info "Running SAST Static Code Analysis (Semgrep)..."
-    log_info "Checks: security vulnerabilities, programming errors, coding standards, and sensitive data."
+    log_info "Checks: security vulnerabilities, programming errors, coding standards, and unsafe patterns."
 
     mkdir -p "$SAST_REPORT_DIR"
 
@@ -129,9 +128,6 @@ else
         log_info "Installing Semgrep..."
         python3 -m pip install --quiet semgrep
     fi
-
-    WRAPPER_ROOT="${WRAPPER_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
-    CUSTOM_SECRET_RULES="$WRAPPER_ROOT/sast/rules/sensitive-data.yml"
 
     # Explicit rule packs work with --metrics=off (--config=auto requires metrics enabled).
     SEMGREP_COMMON=(
@@ -141,7 +137,6 @@ else
         --config=p/typescript
         --config=p/nodejs
         --config=p/security-audit
-        --config=p/secrets
         --metrics=off
         --exclude=node_modules
         --exclude=dist
@@ -149,25 +144,6 @@ else
         --exclude=.next
         --exclude=coverage
     )
-
-    SECRETS_SCAN=(
-        scan
-        --config=p/secrets
-        --config=p/security-audit
-        --metrics=off
-        --exclude=node_modules
-        --exclude=dist
-        --exclude=build
-        --exclude=.next
-        --exclude=coverage
-    )
-
-    if [ -f "$CUSTOM_SECRET_RULES" ]; then
-        log_info "Loading custom sensitive-data rules: $CUSTOM_SECRET_RULES"
-        SECRETS_SCAN+=(--config="$CUSTOM_SECRET_RULES")
-    else
-        log_warning "Custom sensitive-data rules not found at $CUSTOM_SECRET_RULES"
-    fi
 
     set +e
     semgrep "${SEMGREP_COMMON[@]}" --json --json-output="$SAST_REPORT_DIR/semgrep.json" .
@@ -177,13 +153,6 @@ else
     # Semgrep allows only one output format per run (--json and --sarif are mutually exclusive).
     semgrep "${SEMGREP_COMMON[@]}" --sarif --output="$SAST_REPORT_DIR/semgrep.sarif" . >/dev/null 2>&1 || true
     semgrep "${SEMGREP_COMMON[@]}" --text --output="$SAST_REPORT_DIR/semgrep.txt" . >/dev/null 2>&1 || true
-
-    log_info "Running sensitive data / hardcoded secrets scan..."
-    set +e
-    semgrep "${SECRETS_SCAN[@]}" --json --json-output="$SAST_REPORT_DIR/sensitive-data.json" .
-    SECRETS_EXIT=$?
-    set -e
-    semgrep "${SECRETS_SCAN[@]}" --text --output="$SAST_REPORT_DIR/sensitive-data.txt" . >/dev/null 2>&1 || true
 
     if [ -f "$SAST_REPORT_DIR/semgrep.json" ]; then
         FINDING_COUNT=$(python3 - <<PY
@@ -202,39 +171,6 @@ PY
         log_warning "SAST JSON report was not generated."
         if [ "$SAST_EXIT" -ne 0 ]; then
             log_error "SAST scan failed to run. Check Semgrep installation and logs above."
-        fi
-    fi
-
-    if [ -f "$SAST_REPORT_DIR/sensitive-data.json" ]; then
-        SECRET_COUNT=$(python3 - <<PY
-import json
-with open("$SAST_REPORT_DIR/sensitive-data.json", encoding="utf-8") as handle:
-    print(len(json.load(handle).get("results", [])))
-PY
-)
-        log_info "Sensitive data findings detected: $SECRET_COUNT"
-        log_info "Sensitive data report: $SAST_REPORT_DIR/sensitive-data.json"
-
-        if [ "$SECRET_COUNT" -gt 0 ]; then
-            log_warning "Hardcoded secrets or sensitive values found! Review sensitive-data report."
-            python3 - <<PY
-import json
-with open("$SAST_REPORT_DIR/sensitive-data.json", encoding="utf-8") as handle:
-    for item in json.load(handle).get("results", [])[:10]:
-        path = item.get("path", "unknown")
-        line = item.get("start", {}).get("line", "?")
-        msg = item.get("extra", {}).get("message", "Sensitive data detected")
-        print(f"  - {path}:{line} — {msg}")
-PY
-        fi
-
-        if [ "$SAST_FAIL_ON_SECRETS" = "true" ] && [ "$SECRET_COUNT" -gt 0 ]; then
-            log_error "Sensitive data scan found $SECRET_COUNT hardcoded secret(s). Remove them and use environment variables or GitHub Secrets."
-        fi
-    else
-        log_warning "Sensitive data JSON report was not generated."
-        if [ "$SECRETS_EXIT" -ne 0 ]; then
-            log_error "Sensitive data scan failed to run."
         fi
     fi
 

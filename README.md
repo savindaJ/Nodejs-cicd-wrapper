@@ -115,7 +115,6 @@ jobs:
 | `skip-lint` | Set to `true` to skip code linting | No | `false` |
 | `skip-sast` | Set to `true` to skip SAST static analysis | No | `false` |
 | `sast-fail-on-findings` | Set to `true` to fail the job when SAST finds issues | No | `false` |
-| `sast-fail-on-secrets` | Set to `true` to fail when hardcoded secrets/sensitive data are found | No | `false` |
 | `sast-report-dir` | Directory for SAST report files | No | `sast-reports` |
 | `skip-dast` | Set to `true` to skip DAST dynamic scanning | No | `false` |
 | `dast-target` | Running application URL for OWASP ZAP to scan | No | _(empty — DAST skipped)_ |
@@ -136,36 +135,8 @@ The wrapper uses [Semgrep](https://semgrep.dev/) for SAST. It scans your source 
 Reports are published in three places:
 
 1. **GitHub Actions job summary** — severity counts and top findings table
-2. **Workflow artifacts** — `semgrep.json`, `semgrep.txt`, `semgrep.sarif`, `sensitive-data.json`, `sensitive-data.txt`
+2. **Workflow artifacts** — `semgrep.json`, `semgrep.txt`, and `semgrep.sarif`
 3. **GitHub Security tab** — SARIF upload (requires `security-events: write`)
-
-### Sensitive data detection
-
-A dedicated Semgrep secrets scan (`p/secrets`) detects hardcoded:
-
-- API keys and tokens
-- AWS / cloud credentials
-- Database passwords and connection strings
-- JWT secrets and private keys
-
-**Fail CI when secrets are found:**
-
-```yaml
-- uses: your-org/nodejs-cicd-wrapper@v1
-  with:
-    sast-fail-on-secrets: 'true'
-```
-
-The job summary includes a separate **Sensitive Data Scan** section listing each finding by file and line.
-
-Custom rules in `sast/rules/sensitive-data.yml` detect generic hardcoded passwords, API keys, JWT secrets, OAuth tokens, and database URLs — not just Stripe/AWS patterns.
-
-**Test locally before pushing:**
-
-```bash
-cd nodejs-cicd-wrapper
-./scripts/scan-secrets-local.sh /path/to/your/project
-```
 
 **Fail the pipeline on SAST findings:**
 

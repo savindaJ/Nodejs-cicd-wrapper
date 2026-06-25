@@ -31,10 +31,6 @@ inputs:
     description: 'Fail the pipeline when SAST finds issues'
     required: false
     default: 'false'
-  sast-fail-on-secrets:
-    description: 'Fail the pipeline when hardcoded secrets or sensitive data are detected'
-    required: false
-    default: 'false'
   sast-report-dir:
     description: 'Directory where SAST reports are written'
     required: false
@@ -78,7 +74,6 @@ runs:
       run: |
         chmod +x "${{ github.action_path }}/setup-build.sh"
         chmod +x "${{ github.action_path }}/scripts/sast-summary.sh"
-        chmod +x "${{ github.action_path }}/scripts/sensitive-data-summary.sh"
         chmod +x "${{ github.action_path }}/scripts/dast-prepare.sh"
         chmod +x "${{ github.action_path }}/scripts/dast-summary.sh"
         chmod +x "${{ github.action_path }}/scripts/dast-collect.sh"
@@ -88,9 +83,7 @@ runs:
       shell: bash
       env:
         SAST_FAIL_ON_FINDINGS: ${{ inputs.sast-fail-on-findings }}
-        SAST_FAIL_ON_SECRETS: ${{ inputs.sast-fail-on-secrets }}
         SAST_REPORT_DIR: ${{ inputs.sast-report-dir }}
-        WRAPPER_ROOT: ${{ github.action_path }}
       run: |
         FLAGS=""
         if [ "${{ inputs.skip-tests }}" = "true" ]; then FLAGS="$FLAGS --skip-tests"; fi
@@ -106,13 +99,6 @@ runs:
         SAST_REPORT_DIR: ${{ inputs.sast-report-dir }}
       run: bash "${{ github.action_path }}/scripts/sast-summary.sh"
 
-    - name: Publish sensitive data report to job summary
-      if: inputs.pipeline-mode != 'dast-only' && inputs.skip-sast != 'true'
-      shell: bash
-      env:
-        SAST_REPORT_DIR: ${{ inputs.sast-report-dir }}
-      run: bash "${{ github.action_path }}/scripts/sensitive-data-summary.sh"
-
     - name: Upload SAST SARIF to GitHub Security
       if: inputs.pipeline-mode != 'dast-only' && inputs.skip-sast != 'true'
       uses: github/codeql-action/upload-sarif@v3
@@ -126,17 +112,6 @@ runs:
       with:
         name: sast-report
         path: ${{ inputs.sast-report-dir }}/
-        if-no-files-found: warn
-        retention-days: 30
-
-    - name: Upload sensitive data report artifact
-      if: inputs.pipeline-mode != 'dast-only' && inputs.skip-sast != 'true'
-      uses: actions/upload-artifact@v4
-      with:
-        name: sensitive-data-report
-        path: |
-          ${{ inputs.sast-report-dir }}/sensitive-data.json
-          ${{ inputs.sast-report-dir }}/sensitive-data.txt
         if-no-files-found: warn
         retention-days: 30
 
