@@ -1,0 +1,56 @@
+rules:
+  - id: hardcoded-sensitive-variable
+    languages: [javascript, typescript]
+    message: Hardcoded sensitive value assigned to $VAR — use environment variables or a secrets manager
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "$VALUE"
+          - pattern: $VAR = '$VALUE'
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i).*(password|passwd|pwd|secret|token|apikey|api_key|api-key|jwt|oauth|credential|private_key|privatekey).*
+
+  - id: hardcoded-sensitive-export
+    languages: [javascript, typescript]
+    message: Hardcoded sensitive value exported as $NAME — use environment variables or a secrets manager
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: export const $NAME = "$VALUE"
+          - pattern: export const $NAME = '$VALUE'
+          - pattern: export let $NAME = "$VALUE"
+          - pattern: export let $NAME = '$VALUE'
+      - metavariable-regex:
+          metavariable: $NAME
+          regex: (?i).*(password|passwd|pwd|secret|token|apikey|api_key|api-key|jwt|oauth|credential|private_key|privatekey).*
+
+  - id: hardcoded-api-key-generic
+    languages: [javascript, typescript]
+    message: Possible hardcoded API key in $VAR
+    severity: ERROR
+    patterns:
+      - pattern-either:
+          - pattern: $VAR = "$VALUE"
+          - pattern: $VAR = '$VALUE'
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: (?i)^api[_-]?key$
+
+  - id: hardcoded-database-connection-string
+    languages: [javascript, typescript]
+    message: Database connection string with embedded credentials detected
+    severity: ERROR
+    pattern-regex: (?i)(postgres(?:ql)?|mysql|mongodb(\+srv)?|redis)://[^\s'"]+:[^\s'"]+@
+
+  - id: hardcoded-aws-access-key
+    languages: [javascript, typescript]
+    message: Possible hardcoded AWS access key (AKIA...)
+    severity: ERROR
+    pattern-regex: AKIA[0-9A-Z]{16}
+
+  - id: hardcoded-stripe-key
+    languages: [javascript, typescript]
+    message: Possible hardcoded Stripe API key
+    severity: ERROR
+    pattern-regex: sk_(live|test)_[0-9a-zA-Z]{10,}

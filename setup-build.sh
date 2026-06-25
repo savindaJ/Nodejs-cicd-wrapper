@@ -130,6 +130,9 @@ else
         python3 -m pip install --quiet semgrep
     fi
 
+    WRAPPER_ROOT="${WRAPPER_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+    CUSTOM_SECRET_RULES="$WRAPPER_ROOT/sast/rules/sensitive-data.yml"
+
     # Explicit rule packs work with --metrics=off (--config=auto requires metrics enabled).
     SEMGREP_COMMON=(
         scan
@@ -158,6 +161,13 @@ else
         --exclude=.next
         --exclude=coverage
     )
+
+    if [ -f "$CUSTOM_SECRET_RULES" ]; then
+        log_info "Loading custom sensitive-data rules: $CUSTOM_SECRET_RULES"
+        SECRETS_SCAN+=(--config="$CUSTOM_SECRET_RULES")
+    else
+        log_warning "Custom sensitive-data rules not found at $CUSTOM_SECRET_RULES"
+    fi
 
     set +e
     semgrep "${SEMGREP_COMMON[@]}" --json --json-output="$SAST_REPORT_DIR/semgrep.json" .

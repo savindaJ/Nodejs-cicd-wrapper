@@ -158,6 +158,15 @@ A dedicated Semgrep secrets scan (`p/secrets`) detects hardcoded:
 
 The job summary includes a separate **Sensitive Data Scan** section listing each finding by file and line.
 
+Custom rules in `sast/rules/sensitive-data.yml` detect generic hardcoded passwords, API keys, JWT secrets, OAuth tokens, and database URLs — not just Stripe/AWS patterns.
+
+**Test locally before pushing:**
+
+```bash
+cd nodejs-cicd-wrapper
+./scripts/scan-secrets-local.sh /path/to/your/project
+```
+
 **Fail the pipeline on SAST findings:**
 
 ```yaml

@@ -90,6 +90,7 @@ runs:
         SAST_FAIL_ON_FINDINGS: ${{ inputs.sast-fail-on-findings }}
         SAST_FAIL_ON_SECRETS: ${{ inputs.sast-fail-on-secrets }}
         SAST_REPORT_DIR: ${{ inputs.sast-report-dir }}
+        WRAPPER_ROOT: ${{ github.action_path }}
       run: |
         FLAGS=""
         if [ "${{ inputs.skip-tests }}" = "true" ]; then FLAGS="$FLAGS --skip-tests"; fi
