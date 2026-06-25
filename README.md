@@ -1,6 +1,6 @@
 # Node.js CI/CD Wrapper
 
-A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipeline — clean install, security audit, lint, test, and build — with retry logic, colored logging, and optional skip flags.
+A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipeline — clean install, security audit, **SAST static analysis**, lint, test, and build — with retry logic, colored logging, and optional skip flags.
 
 ## Pipeline
 
@@ -9,12 +9,13 @@ A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipelin
 | Step | Command | Notes |
 | --- | --- | --- |
 | 1. Environment check | `node -v`, `npm -v` | Fails if Node.js or npm is missing |
-| 2. Clean install | `npm ci` | Retries up to 3 times with a 10s delay |
-| 3. Security audit | `npm audit --audit-level=high` | Fails on high or critical vulnerabilities |
-| 4. Lint | `npm run lint` | Skipped if no `lint` script exists, or when `--skip-lint` is passed |
-| 5. Test | `npm run test` | Skipped if no `test` script exists, or when `--skip-tests` is passed |
-| 6. Build | `npm run build` | Always runs |
-| 7. Build verification | — | Confirms `build/`, `dist/`, or `.next/` was created |
+| 2. Clean install | `npm ci --include=dev` | Retries up to 3 times with a 10s delay |
+| 3. Security audit | `npm audit --audit-level=high` | Fails on high or critical dependency vulnerabilities |
+| 4. SAST scan | `semgrep scan --config=auto` | Static analysis for security bugs, errors, and coding issues; SARIF + summary report |
+| 5. Lint | `npm run lint` | Skipped if no `lint` script exists, or when `--skip-lint` is passed |
+| 6. Test | `npm run test` | Skipped if no `test` script exists, or when `--skip-tests` is passed |
+| 7. Build | `npm run build` | Always runs |
+| 8. Build verification | — | Confirms `build/`, `dist/`, or `.next/` was created |
 
 Required `package.json` scripts:
 
@@ -45,6 +46,9 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      security-events: write
     steps:
       - uses: actions/checkout@v4
 
@@ -53,6 +57,8 @@ jobs:
           node-version: '20'
           skip-tests: 'false'
           skip-lint: 'false'
+          skip-sast: 'false'
+          sast-fail-on-findings: 'false'
         env:
           NODE_ENV: production
 ```
@@ -64,6 +70,40 @@ jobs:
 | `node-version` | Node.js version to install via `actions/setup-node` | No | `20` |
 | `skip-tests` | Set to `true` to skip unit tests | No | `false` |
 | `skip-lint` | Set to `true` to skip code linting | No | `false` |
+| `skip-sast` | Set to `true` to skip SAST static analysis | No | `false` |
+| `sast-fail-on-findings` | Set to `true` to fail the job when SAST finds issues | No | `false` |
+| `sast-report-dir` | Directory for SAST report files | No | `sast-reports` |
+
+### SAST static analysis
+
+The wrapper uses [Semgrep](https://semgrep.dev/) for SAST. It scans your source code for:
+
+- Security vulnerabilities (SQL injection, XSS, hardcoded secrets, etc.)
+- Programming errors and unsafe patterns
+- Coding standard violations
+- Syntax and logic issues surfaced by static rules
+
+Reports are published in three places:
+
+1. **GitHub Actions job summary** — severity counts and top findings table
+2. **Workflow artifacts** — `semgrep.json`, `semgrep.txt`, and `semgrep.sarif`
+3. **GitHub Security tab** — SARIF upload (requires `security-events: write`)
+
+**Fail the pipeline on SAST findings:**
+
+```yaml
+- uses: your-org/nodejs-cicd-wrapper@v1
+  with:
+    sast-fail-on-findings: 'true'
+```
+
+**Skip SAST for quick runs:**
+
+```yaml
+- uses: your-org/nodejs-cicd-wrapper@v1
+  with:
+    skip-sast: 'true'
+```
 
 ### Examples
 
@@ -112,6 +152,7 @@ NODE_ENV=production ./setup-build.sh
 | --- | --- |
 | `--skip-tests` | Skip the unit test step |
 | `--skip-lint` | Skip the lint step |
+| `--skip-sast` | Skip the SAST static analysis step |
 
 ```bash
 # Full pipeline
@@ -170,6 +211,8 @@ REQUIRED_VARS=("NODE_ENV" "API_URL")
 nodejs-cicd-wrapper/
 ├── action.yml               # GitHub Action entry point
 ├── setup-build.sh           # CI/CD pipeline script
+├── scripts/
+│   └── sast-summary.sh      # Writes SAST results to GitHub job summary
 ├── README.md
 ├── LICENSE
 ├── .gitignore

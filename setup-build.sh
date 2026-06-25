@@ -61,11 +61,15 @@ with_retry() {
 # ==========================================
 SKIP_TESTS=false
 SKIP_LINT=false
+SKIP_SAST=false
+SAST_REPORT_DIR="${SAST_REPORT_DIR:-sast-reports}"
+SAST_FAIL_ON_FINDINGS="${SAST_FAIL_ON_FINDINGS:-false}"
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --skip-tests) SKIP_TESTS=true ;;
         --skip-lint) SKIP_LINT=true ;;
+        --skip-sast) SKIP_SAST=true ;;
         *) log_warning "Unknown parameter passed: $1"; exit 1 ;;
     esac
     shift
@@ -110,7 +114,71 @@ npm audit --audit-level=high || log_error "High/Critical security vulnerabilitie
 log_success "Security audit passed."
 
 # ==========================================
-# Step 3: Code Linting
+# Step 3: SAST Static Code Analysis
+# ==========================================
+if [ "$SKIP_SAST" = true ]; then
+    log_warning "Skipping SAST static analysis as requested by --skip-sast flag."
+else
+    log_info "Running SAST Static Code Analysis (Semgrep)..."
+    log_info "Checks: security vulnerabilities, programming errors, coding standards, and unsafe patterns."
+
+    mkdir -p "$SAST_REPORT_DIR"
+
+    if ! command -v semgrep >/dev/null 2>&1; then
+        log_info "Installing Semgrep..."
+        python3 -m pip install --quiet semgrep
+    fi
+
+    SEMGREP_ARGS=(
+        scan
+        --config=auto
+        --metrics=off
+        --exclude=node_modules
+        --exclude=dist
+        --exclude=build
+        --exclude=.next
+        --exclude=coverage
+        --sarif
+        --output="$SAST_REPORT_DIR/semgrep.sarif"
+        --json
+        --json-output="$SAST_REPORT_DIR/semgrep.json"
+    )
+
+    if [ "$SAST_FAIL_ON_FINDINGS" = "true" ]; then
+        SEMGREP_ARGS+=(--error)
+    fi
+
+    set +e
+    semgrep "${SEMGREP_ARGS[@]}" .
+    SAST_EXIT=$?
+    set -e
+
+    semgrep scan --config=auto --metrics=off --text \
+        --exclude=node_modules --exclude=dist --exclude=build --exclude=.next --exclude=coverage \
+        --output="$SAST_REPORT_DIR/semgrep.txt" . >/dev/null 2>&1 || true
+
+    if [ -f "$SAST_REPORT_DIR/semgrep.json" ]; then
+        FINDING_COUNT=$(python3 - <<PY
+import json
+with open("$SAST_REPORT_DIR/semgrep.json", encoding="utf-8") as handle:
+    print(len(json.load(handle).get("results", [])))
+PY
+)
+        log_info "SAST findings detected: $FINDING_COUNT"
+        log_info "Reports written to: $SAST_REPORT_DIR/"
+    else
+        log_warning "SAST JSON report was not generated."
+    fi
+
+    if [ "$SAST_FAIL_ON_FINDINGS" = "true" ] && [ "$SAST_EXIT" -ne 0 ]; then
+        log_error "SAST scan found issues. Review the report in the GitHub Actions summary or artifacts."
+    fi
+
+    log_success "SAST static analysis completed."
+fi
+
+# ==========================================
+# Step 4: Code Linting
 # ==========================================
 if [ "$SKIP_LINT" = true ]; then
     log_warning "Skipping linting as requested by --skip-lint flag."
@@ -123,7 +191,7 @@ else
 fi
 
 # ==========================================
-# Step 4: Unit Testing
+# Step 5: Unit Testing
 # ==========================================
 if [ "$SKIP_TESTS" = true ]; then
     log_warning "Skipping tests as requested by --skip-tests flag."
@@ -136,7 +204,7 @@ else
 fi
 
 # ==========================================
-# Step 5: Build Application
+# Step 6: Build Application
 # ==========================================
 log_info "Building the Node.js application..."
 npm run build || log_error "Build process failed!"

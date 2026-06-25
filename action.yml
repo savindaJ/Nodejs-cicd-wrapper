@@ -1,9 +1,9 @@
 name: 'Node.js CI/CD Wrapper'
-description: 'Automated Node.js setup, build, and test pipeline for GitHub Actions'
-author: 'Your Name'
+description: 'Automated Node.js setup, build, test, and SAST pipeline for GitHub Actions'
+author: 'savindaJ'
 
 branding:
-  icon: 'package'
+  icon: 'shield'
   color: 'green'
 
 inputs:
@@ -11,48 +11,73 @@ inputs:
     description: 'Node.js version to install (e.g. 20, 22.x)'
     required: false
     default: '20'
-  package-manager:
-    description: 'Package manager to use (npm, yarn, or pnpm)'
-    required: false
-    default: 'npm'
-  install-command:
-    description: 'Override the install command'
-    required: false
-    default: ''
-  build-command:
-    description: 'Override the build command'
-    required: false
-    default: ''
-  test-command:
-    description: 'Override the test command'
-    required: false
-    default: ''
-  working-directory:
-    description: 'Directory where the Node.js project lives'
-    required: false
-    default: '.'
-  skip-build:
-    description: 'Skip the build step'
+  skip-tests:
+    description: 'Set to true to skip unit tests'
     required: false
     default: 'false'
-  skip-test:
-    description: 'Skip the test step'
+  skip-lint:
+    description: 'Set to true to skip code linting'
     required: false
     default: 'false'
+  skip-sast:
+    description: 'Set to true to skip SAST static code analysis'
+    required: false
+    default: 'false'
+  sast-fail-on-findings:
+    description: 'Fail the pipeline when SAST finds issues'
+    required: false
+    default: 'false'
+  sast-report-dir:
+    description: 'Directory where SAST reports are written'
+    required: false
+    default: 'sast-reports'
 
 runs:
   using: 'composite'
   steps:
-    - name: Run setup and build
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node-version }}
+
+    - name: Make scripts executable
+      shell: bash
+      run: |
+        chmod +x "${{ github.action_path }}/setup-build.sh"
+        chmod +x "${{ github.action_path }}/scripts/sast-summary.sh"
+
+    - name: Run CI/CD pipeline
       shell: bash
       env:
-        INPUT_NODE_VERSION: ${{ inputs.node-version }}
-        INPUT_PACKAGE_MANAGER: ${{ inputs.package-manager }}
-        INPUT_INSTALL_COMMAND: ${{ inputs.install-command }}
-        INPUT_BUILD_COMMAND: ${{ inputs.build-command }}
-        INPUT_TEST_COMMAND: ${{ inputs.test-command }}
-        INPUT_WORKING_DIRECTORY: ${{ inputs.working-directory }}
-        INPUT_SKIP_BUILD: ${{ inputs.skip-build }}
-        INPUT_SKIP_TEST: ${{ inputs.skip-test }}
+        SAST_FAIL_ON_FINDINGS: ${{ inputs.sast-fail-on-findings }}
+        SAST_REPORT_DIR: ${{ inputs.sast-report-dir }}
       run: |
-        bash "${{ github.action_path }}/setup-build.sh"
+        FLAGS=""
+        if [ "${{ inputs.skip-tests }}" = "true" ]; then FLAGS="$FLAGS --skip-tests"; fi
+        if [ "${{ inputs.skip-lint }}" = "true" ]; then FLAGS="$FLAGS --skip-lint"; fi
+        if [ "${{ inputs.skip-sast }}" = "true" ]; then FLAGS="$FLAGS --skip-sast"; fi
+
+        bash "${{ github.action_path }}/setup-build.sh" $FLAGS
+
+    - name: Publish SAST report to job summary
+      if: inputs.skip-sast != 'true'
+      shell: bash
+      env:
+        SAST_REPORT_DIR: ${{ inputs.sast-report-dir }}
+      run: bash "${{ github.action_path }}/scripts/sast-summary.sh"
+
+    - name: Upload SAST SARIF to GitHub Security
+      if: inputs.skip-sast != 'true'
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sast-report-dir }}/semgrep.sarif
+        category: semgrep-sast
+
+    - name: Upload SAST report artifact
+      if: inputs.skip-sast != 'true'
+      uses: actions/upload-artifact@v4
+      with:
+        name: sast-report
+        path: ${{ inputs.sast-report-dir }}/
+        if-no-files-found: warn
+        retention-days: 30
