@@ -129,7 +129,7 @@ else
         python3 -m pip install --quiet semgrep
     fi
 
-    SEMGREP_ARGS=(
+    SEMGREP_COMMON=(
         scan
         --config=auto
         --metrics=off
@@ -138,24 +138,16 @@ else
         --exclude=build
         --exclude=.next
         --exclude=coverage
-        --sarif
-        --output="$SAST_REPORT_DIR/semgrep.sarif"
-        --json
-        --json-output="$SAST_REPORT_DIR/semgrep.json"
     )
 
-    if [ "$SAST_FAIL_ON_FINDINGS" = "true" ]; then
-        SEMGREP_ARGS+=(--error)
-    fi
-
     set +e
-    semgrep "${SEMGREP_ARGS[@]}" .
+    semgrep "${SEMGREP_COMMON[@]}" --json --json-output="$SAST_REPORT_DIR/semgrep.json" .
     SAST_EXIT=$?
     set -e
 
-    semgrep scan --config=auto --metrics=off --text \
-        --exclude=node_modules --exclude=dist --exclude=build --exclude=.next --exclude=coverage \
-        --output="$SAST_REPORT_DIR/semgrep.txt" . >/dev/null 2>&1 || true
+    # Semgrep allows only one output format per run (--json and --sarif are mutually exclusive).
+    semgrep "${SEMGREP_COMMON[@]}" --sarif --output="$SAST_REPORT_DIR/semgrep.sarif" . >/dev/null 2>&1 || true
+    semgrep "${SEMGREP_COMMON[@]}" --text --output="$SAST_REPORT_DIR/semgrep.txt" . >/dev/null 2>&1 || true
 
     if [ -f "$SAST_REPORT_DIR/semgrep.json" ]; then
         FINDING_COUNT=$(python3 - <<PY
@@ -166,12 +158,15 @@ PY
 )
         log_info "SAST findings detected: $FINDING_COUNT"
         log_info "Reports written to: $SAST_REPORT_DIR/"
+
+        if [ "$SAST_FAIL_ON_FINDINGS" = "true" ] && [ "$FINDING_COUNT" -gt 0 ]; then
+            log_error "SAST scan found $FINDING_COUNT issue(s). Review the report in the GitHub Actions summary or artifacts."
+        fi
     else
         log_warning "SAST JSON report was not generated."
-    fi
-
-    if [ "$SAST_FAIL_ON_FINDINGS" = "true" ] && [ "$SAST_EXIT" -ne 0 ]; then
-        log_error "SAST scan found issues. Review the report in the GitHub Actions summary or artifacts."
+        if [ "$SAST_EXIT" -ne 0 ]; then
+            log_error "SAST scan failed to run. Check Semgrep installation and logs above."
+        fi
     fi
 
     log_success "SAST static analysis completed."
