@@ -12,10 +12,25 @@ if [ -z "${GITHUB_STEP_SUMMARY:-}" ]; then
 fi
 
 if [ ! -f "$JSON_REPORT" ]; then
+  STATUS_FILE="$DAST_REPORT_DIR/dast-status.txt"
   {
     echo "## DAST Dynamic Application Security Testing (OWASP ZAP)"
     echo
-    echo "No ZAP JSON report found at \`$JSON_REPORT\`."
+    if [ -f "$STATUS_FILE" ]; then
+      echo "**Scan skipped — target unreachable from GitHub Actions.**"
+      echo
+      while IFS='=' read -r key value; do
+        case "$key" in
+          target) echo "- **Target:** \`$value\`" ;;
+          reason) echo "- **Reason:** $value" ;;
+          hint) echo "- **Hint:** $value" ;;
+        esac
+      done < "$STATUS_FILE"
+      echo
+      echo "Your site must be publicly reachable from GitHub cloud runners. If \`beautystore.lk\` blocks external CI IPs, allow [GitHub Actions IP ranges](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-githubs-ip-addresses) or run DAST on a self-hosted runner inside your network."
+    else
+      echo "No ZAP JSON report found at \`$JSON_REPORT\`."
+    fi
   } >> "$GITHUB_STEP_SUMMARY"
   exit 0
 fi

@@ -55,6 +55,14 @@ inputs:
     description: 'Fail the pipeline when OWASP ZAP finds alerts'
     required: false
     default: 'false'
+  dast-fail-on-unreachable:
+    description: 'Fail the pipeline when the DAST target URL cannot be reached from GitHub Actions'
+    required: false
+    default: 'false'
+  dast-connect-timeout:
+    description: 'Seconds to wait when checking if the DAST target is reachable'
+    required: false
+    default: '30'
   dast-report-dir:
     description: 'Directory where DAST reports are written'
     required: false
@@ -173,11 +181,14 @@ runs:
         DAST_START_COMMAND: ${{ inputs.dast-start-command }}
         DAST_START_WAIT_SECONDS: ${{ inputs.dast-start-wait-seconds }}
         DAST_REPORT_DIR: ${{ inputs.dast-report-dir }}
+        DAST_FAIL_ON_UNREACHABLE: ${{ inputs.dast-fail-on-unreachable }}
+        DAST_CONNECT_TIMEOUT: ${{ inputs.dast-connect-timeout }}
       run: bash "${{ github.action_path }}/scripts/dast-prepare.sh"
 
     - name: OWASP ZAP DAST scan
-      if: (inputs.pipeline-mode == 'dast-only' || (inputs.pipeline-mode == 'full' && inputs.skip-dast != 'true')) && inputs.dast-target != ''
+      if: (inputs.pipeline-mode == 'dast-only' || (inputs.pipeline-mode == 'full' && inputs.skip-dast != 'true')) && inputs.dast-target != '' && env.DAST_TARGET_REACHABLE == 'true'
       uses: zaproxy/action-baseline@v0.14.0
+      continue-on-error: ${{ inputs.dast-fail-on-findings != 'true' && inputs.dast-fail-on-unreachable != 'true' }}
       with:
         target: ${{ env.DAST_TARGET }}
         fail_action: ${{ inputs.dast-fail-on-findings }}

@@ -132,6 +132,8 @@ jobs:
 | `dast-start-command` | Command to start the app in background before DAST | No | _(empty)_ |
 | `dast-start-wait-seconds` | Seconds to wait for the app to become ready | No | `15` |
 | `dast-fail-on-findings` | Set to `true` to fail the job when ZAP finds alerts | No | `false` |
+| `dast-fail-on-unreachable` | Set to `true` to fail when the target URL cannot be reached | No | `false` |
+| `dast-connect-timeout` | Seconds to wait for a connectivity check before ZAP runs | No | `30` |
 | `dast-report-dir` | Directory for DAST report files | No | `dast-reports` |
 
 ### Secret scanning (Gitleaks)
@@ -267,6 +269,12 @@ To scan **both** API and frontend, run the action twice with different `dast-tar
 **Alert levels and CI failure:**
 
 By default, ZAP fails on any alert including warnings. When `dast-fail-on-findings` is `false`, the wrapper passes `-I` to ZAP so **warnings do not fail the job** — only FAIL-level alerts will fail. Set `dast-fail-on-findings: 'true'` to fail on any alert.
+
+**Target must be reachable from GitHub Actions.** If you see `Connect timed out` for a deployed site, your server/firewall/WAF is likely blocking GitHub cloud runner IPs. Options:
+
+1. Allow [GitHub Actions IP ranges](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/about-githubs-ip-addresses) on your server
+2. Run the DAST job on a **self-hosted runner** inside your network
+3. Set `dast-fail-on-unreachable: 'false'` (default) to skip ZAP gracefully and show a summary message instead of failing
 
 ### Examples
 
