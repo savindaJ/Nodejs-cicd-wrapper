@@ -7,6 +7,10 @@ branding:
   color: 'green'
 
 inputs:
+  pipeline-mode:
+    description: 'Pipeline stage — full (build + DAST), build (build only), or dast-only (post-deploy DAST scan)'
+    required: false
+    default: 'full'
   node-version:
     description: 'Node.js version to install (e.g. 20, 22.x)'
     required: false
@@ -60,6 +64,7 @@ runs:
   using: 'composite'
   steps:
     - name: Setup Node.js
+      if: inputs.pipeline-mode != 'dast-only'
       uses: actions/setup-node@v4
       with:
         node-version: ${{ inputs.node-version }}
@@ -74,6 +79,7 @@ runs:
         chmod +x "${{ github.action_path }}/scripts/dast-collect.sh"
 
     - name: Run CI/CD pipeline
+      if: inputs.pipeline-mode != 'dast-only'
       shell: bash
       env:
         SAST_FAIL_ON_FINDINGS: ${{ inputs.sast-fail-on-findings }}
@@ -87,21 +93,21 @@ runs:
         bash "${{ github.action_path }}/setup-build.sh" $FLAGS
 
     - name: Publish SAST report to job summary
-      if: inputs.skip-sast != 'true'
+      if: inputs.pipeline-mode != 'dast-only' && inputs.skip-sast != 'true'
       shell: bash
       env:
         SAST_REPORT_DIR: ${{ inputs.sast-report-dir }}
       run: bash "${{ github.action_path }}/scripts/sast-summary.sh"
 
     - name: Upload SAST SARIF to GitHub Security
-      if: inputs.skip-sast != 'true'
+      if: inputs.pipeline-mode != 'dast-only' && inputs.skip-sast != 'true'
       uses: github/codeql-action/upload-sarif@v3
       with:
         sarif_file: ${{ inputs.sast-report-dir }}/semgrep.sarif
         category: semgrep-sast
 
     - name: Upload SAST report artifact
-      if: inputs.skip-sast != 'true'
+      if: inputs.pipeline-mode != 'dast-only' && inputs.skip-sast != 'true'
       uses: actions/upload-artifact@v4
       with:
         name: sast-report
@@ -110,7 +116,7 @@ runs:
         retention-days: 30
 
     - name: Prepare DAST target
-      if: inputs.skip-dast != 'true' && inputs.dast-target != ''
+      if: (inputs.pipeline-mode == 'dast-only' || (inputs.pipeline-mode == 'full' && inputs.skip-dast != 'true')) && inputs.dast-target != ''
       shell: bash
       env:
         DAST_TARGET: ${{ inputs.dast-target }}
@@ -120,7 +126,7 @@ runs:
       run: bash "${{ github.action_path }}/scripts/dast-prepare.sh"
 
     - name: OWASP ZAP DAST scan
-      if: inputs.skip-dast != 'true' && inputs.dast-target != ''
+      if: (inputs.pipeline-mode == 'dast-only' || (inputs.pipeline-mode == 'full' && inputs.skip-dast != 'true')) && inputs.dast-target != ''
       uses: zaproxy/action-baseline@v0.14.0
       with:
         target: ${{ env.DAST_TARGET }}
@@ -130,7 +136,7 @@ runs:
         artifact_name: dast-zap-report
 
     - name: Collect DAST reports
-      if: always() && inputs.skip-dast != 'true' && inputs.dast-target != ''
+      if: always() && (inputs.pipeline-mode == 'dast-only' || (inputs.pipeline-mode == 'full' && inputs.skip-dast != 'true')) && inputs.dast-target != ''
       shell: bash
       env:
         DAST_REPORT_DIR: ${{ inputs.dast-report-dir }}
@@ -138,14 +144,14 @@ runs:
       run: bash "${{ github.action_path }}/scripts/dast-collect.sh"
 
     - name: Publish DAST report to job summary
-      if: always() && inputs.skip-dast != 'true' && inputs.dast-target != ''
+      if: always() && (inputs.pipeline-mode == 'dast-only' || (inputs.pipeline-mode == 'full' && inputs.skip-dast != 'true')) && inputs.dast-target != ''
       shell: bash
       env:
         DAST_REPORT_DIR: ${{ inputs.dast-report-dir }}
       run: bash "${{ github.action_path }}/scripts/dast-summary.sh"
 
     - name: Upload DAST report artifact
-      if: always() && inputs.skip-dast != 'true' && inputs.dast-target != ''
+      if: always() && (inputs.pipeline-mode == 'dast-only' || (inputs.pipeline-mode == 'full' && inputs.skip-dast != 'true')) && inputs.dast-target != ''
       uses: actions/upload-artifact@v4
       with:
         name: dast-report

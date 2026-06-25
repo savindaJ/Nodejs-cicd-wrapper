@@ -32,6 +32,43 @@ Required `package.json` scripts:
 
 Lint and test are optional — the script skips them automatically if those scripts are not defined.
 
+### Pipeline modes
+
+| Mode | When to use |
+| --- | --- |
+| `full` | Single job — build pipeline + DAST together (local app with `dast-start-command`) |
+| `build` | Build phase only — SAST, lint, test, build. **No DAST.** |
+| `dast-only` | Post-deploy — OWASP ZAP scan only against a live URL |
+
+**Recommended: DAST after deployment (separate job):**
+
+```yaml
+jobs:
+  build:
+    steps:
+      - uses: actions/checkout@v4
+      - uses: your-org/nodejs-cicd-wrapper@v1
+        with:
+          pipeline-mode: build
+        env:
+          NODE_ENV: production
+
+  deploy:
+    needs: build
+    steps:
+      - name: Deploy to production
+        run: echo "Deploying to https://example.com"
+
+  dast:
+    needs: deploy
+    steps:
+      - uses: your-org/nodejs-cicd-wrapper@v1
+        with:
+          pipeline-mode: dast-only
+          dast-target: 'https://example.com'
+          dast-fail-on-findings: 'false'
+```
+
 ## Usage in GitHub Actions
 
 Add the action to any workflow. It sets up Node.js and runs `setup-build.sh` for you:
@@ -73,6 +110,7 @@ jobs:
 | Input | Description | Required | Default |
 | --- | --- | --- | --- |
 | `node-version` | Node.js version to install via `actions/setup-node` | No | `20` |
+| `pipeline-mode` | `full` (build + DAST), `build` (build only), or `dast-only` (post-deploy DAST) | No | `full` |
 | `skip-tests` | Set to `true` to skip unit tests | No | `false` |
 | `skip-lint` | Set to `true` to skip code linting | No | `false` |
 | `skip-sast` | Set to `true` to skip SAST static analysis | No | `false` |
