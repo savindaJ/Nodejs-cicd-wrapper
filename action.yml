@@ -1,5 +1,5 @@
 name: 'Node.js CI/CD Wrapper'
-description: 'Automated Node.js setup, build, test, and SAST pipeline for GitHub Actions'
+description: 'Automated Node.js setup, build, test, SAST, and DAST pipeline for GitHub Actions'
 author: 'savindaJ'
 
 branding:
@@ -31,6 +31,30 @@ inputs:
     description: 'Directory where SAST reports are written'
     required: false
     default: 'sast-reports'
+  skip-dast:
+    description: 'Set to true to skip DAST dynamic application security testing'
+    required: false
+    default: 'false'
+  dast-target:
+    description: 'URL of the running application to scan with OWASP ZAP (e.g. http://localhost:3000)'
+    required: false
+    default: ''
+  dast-start-command:
+    description: 'Optional command to start the application before DAST (runs in background)'
+    required: false
+    default: ''
+  dast-start-wait-seconds:
+    description: 'Seconds to wait after starting the application before ZAP scans'
+    required: false
+    default: '15'
+  dast-fail-on-findings:
+    description: 'Fail the pipeline when OWASP ZAP finds alerts'
+    required: false
+    default: 'false'
+  dast-report-dir:
+    description: 'Directory where DAST reports are written'
+    required: false
+    default: 'dast-reports'
 
 runs:
   using: 'composite'
@@ -45,6 +69,9 @@ runs:
       run: |
         chmod +x "${{ github.action_path }}/setup-build.sh"
         chmod +x "${{ github.action_path }}/scripts/sast-summary.sh"
+        chmod +x "${{ github.action_path }}/scripts/dast-prepare.sh"
+        chmod +x "${{ github.action_path }}/scripts/dast-summary.sh"
+        chmod +x "${{ github.action_path }}/scripts/dast-collect.sh"
 
     - name: Run CI/CD pipeline
       shell: bash
@@ -79,5 +106,48 @@ runs:
       with:
         name: sast-report
         path: ${{ inputs.sast-report-dir }}/
+        if-no-files-found: warn
+        retention-days: 30
+
+    - name: Prepare DAST target
+      if: inputs.skip-dast != 'true' && inputs.dast-target != ''
+      shell: bash
+      env:
+        DAST_TARGET: ${{ inputs.dast-target }}
+        DAST_START_COMMAND: ${{ inputs.dast-start-command }}
+        DAST_START_WAIT_SECONDS: ${{ inputs.dast-start-wait-seconds }}
+        DAST_REPORT_DIR: ${{ inputs.dast-report-dir }}
+      run: bash "${{ github.action_path }}/scripts/dast-prepare.sh"
+
+    - name: OWASP ZAP DAST scan
+      if: inputs.skip-dast != 'true' && inputs.dast-target != ''
+      uses: zaproxy/action-baseline@v0.14.0
+      with:
+        target: ${{ env.DAST_TARGET }}
+        fail_action: ${{ inputs.dast-fail-on-findings }}
+        allow_issue_writing: false
+        artifact_name: dast-zap-report
+
+    - name: Collect DAST reports
+      if: always() && inputs.skip-dast != 'true' && inputs.dast-target != ''
+      shell: bash
+      env:
+        DAST_REPORT_DIR: ${{ inputs.dast-report-dir }}
+        DAST_START_COMMAND: ${{ inputs.dast-start-command }}
+      run: bash "${{ github.action_path }}/scripts/dast-collect.sh"
+
+    - name: Publish DAST report to job summary
+      if: always() && inputs.skip-dast != 'true' && inputs.dast-target != ''
+      shell: bash
+      env:
+        DAST_REPORT_DIR: ${{ inputs.dast-report-dir }}
+      run: bash "${{ github.action_path }}/scripts/dast-summary.sh"
+
+    - name: Upload DAST report artifact
+      if: always() && inputs.skip-dast != 'true' && inputs.dast-target != ''
+      uses: actions/upload-artifact@v4
+      with:
+        name: dast-report
+        path: ${{ inputs.dast-report-dir }}/
         if-no-files-found: warn
         retention-days: 30

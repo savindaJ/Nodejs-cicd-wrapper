@@ -29,6 +29,7 @@ build/
 coverage/
 .nyc_output/
 sast-reports/
+dast-reports/
 
 # Temporary files
 tmp/

@@ -1,6 +1,6 @@
 # Node.js CI/CD Wrapper
 
-A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipeline — clean install, security audit, **SAST static analysis**, lint, test, and build — with retry logic, colored logging, and optional skip flags.
+A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipeline — clean install, security audit, **SAST static analysis**, lint, test, build, and optional **DAST dynamic scanning** — with retry logic, colored logging, and optional skip flags.
 
 ## Pipeline
 
@@ -16,6 +16,7 @@ A reusable GitHub Action and shell script that runs a full Node.js CI/CD pipelin
 | 6. Test | `npm run test` | Skipped if no `test` script exists, or when `--skip-tests` is passed |
 | 7. Build | `npm run build` | Always runs |
 | 8. Build verification | — | Confirms `build/`, `dist/`, or `.next/` was created |
+| 9. DAST scan | OWASP ZAP baseline scan | Runs after build when `dast-target` is set; scans a running application URL |
 
 Required `package.json` scripts:
 
@@ -59,6 +60,10 @@ jobs:
           skip-lint: 'false'
           skip-sast: 'false'
           sast-fail-on-findings: 'false'
+          skip-dast: 'false'
+          dast-target: 'http://localhost:3000'
+          dast-start-command: 'npm run start'
+          dast-fail-on-findings: 'false'
         env:
           NODE_ENV: production
 ```
@@ -73,6 +78,12 @@ jobs:
 | `skip-sast` | Set to `true` to skip SAST static analysis | No | `false` |
 | `sast-fail-on-findings` | Set to `true` to fail the job when SAST finds issues | No | `false` |
 | `sast-report-dir` | Directory for SAST report files | No | `sast-reports` |
+| `skip-dast` | Set to `true` to skip DAST dynamic scanning | No | `false` |
+| `dast-target` | Running application URL for OWASP ZAP to scan | No | _(empty — DAST skipped)_ |
+| `dast-start-command` | Command to start the app in background before DAST | No | _(empty)_ |
+| `dast-start-wait-seconds` | Seconds to wait for the app to become ready | No | `15` |
+| `dast-fail-on-findings` | Set to `true` to fail the job when ZAP finds alerts | No | `false` |
+| `dast-report-dir` | Directory for DAST report files | No | `dast-reports` |
 
 ### SAST static analysis
 
@@ -104,6 +115,54 @@ Reports are published in three places:
   with:
     skip-sast: 'true'
 ```
+
+### DAST dynamic analysis (OWASP ZAP)
+
+The wrapper uses [OWASP ZAP](https://www.zaproxy.org/) for DAST. It scans a **running application** for runtime vulnerabilities such as:
+
+- Cross-site scripting (XSS)
+- Security misconfigurations
+- Exposed endpoints and headers
+- Injection flaws detectable at runtime
+
+DAST runs **after the build step** when `dast-target` is provided.
+
+**Scan a locally started app (CI):**
+
+```yaml
+- uses: your-org/nodejs-cicd-wrapper@v1
+  with:
+    dast-target: 'http://localhost:3000'
+    dast-start-command: 'npm run start'
+    dast-start-wait-seconds: '15'
+    dast-fail-on-findings: 'false'
+```
+
+**Scan a deployed staging URL:**
+
+```yaml
+- uses: your-org/nodejs-cicd-wrapper@v1
+  with:
+    dast-target: 'https://staging.example.com'
+    dast-fail-on-findings: 'true'
+```
+
+Reports are published in:
+
+1. **GitHub Actions job summary** — alert counts by risk level
+2. **Workflow artifacts** — `report_html.html`, `report_json.json`, `report_md.md`
+
+> **Note:** When scanning `localhost`, the wrapper automatically rewrites the URL to the runner IP so OWASP ZAP (running in Docker) can reach your app.
+
+**Skip DAST:**
+
+```yaml
+- uses: your-org/nodejs-cicd-wrapper@v1
+  with:
+    skip-dast: 'true'
+```
+
+Or leave `dast-target` empty.
 
 ### Examples
 
@@ -212,7 +271,10 @@ nodejs-cicd-wrapper/
 ├── action.yml               # GitHub Action entry point
 ├── setup-build.sh           # CI/CD pipeline script
 ├── scripts/
-│   └── sast-summary.sh      # Writes SAST results to GitHub job summary
+│   ├── sast-summary.sh      # Writes SAST results to GitHub job summary
+│   ├── dast-prepare.sh      # Starts app and prepares DAST target URL
+│   ├── dast-collect.sh      # Collects OWASP ZAP report files
+│   └── dast-summary.sh      # Writes DAST results to GitHub job summary
 ├── README.md
 ├── LICENSE
 ├── .gitignore
